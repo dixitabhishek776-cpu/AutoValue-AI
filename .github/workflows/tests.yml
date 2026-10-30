@@ -30,6 +30,24 @@ jobs:
         run: |
           python -m py_compile app.py train.py src/*.py tests/*.py
 
-      - name: Run automated tests
+      - name: Run schema tests
+        run: python -m pytest -v
+
+      - name: Train demo model
+        run: python train.py
+
+      - name: Verify model prediction
         run: |
-          python -m pytest -v
+          python - <<'PY'
+          from src.valuation import load_model, predict_price, load_sample_data
+
+          model = load_model("models/used_car_model.joblib")
+          assert model is not None, "Model was not saved"
+
+          data = load_sample_data()
+          record = data.drop(columns=["selling_price"]).iloc[0].to_dict()
+          price = predict_price(model, record)
+
+          assert price > 0, "Invalid prediction"
+          print(f"Model prediction successful: INR {price:,.2f}")
+          PY
