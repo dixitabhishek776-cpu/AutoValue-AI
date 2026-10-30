@@ -1,4 +1,4 @@
-name: AutoValue AI - Automated Tests
+name: AutoValue AI - Tests and Real-Data Training
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  test-and-train:
     runs-on: ubuntu-latest
 
     steps:
@@ -30,24 +30,33 @@ jobs:
         run: |
           python -m py_compile app.py train.py src/*.py tests/*.py
 
-      - name: Run schema tests
+      - name: Run tests
         run: python -m pytest -v
 
-      - name: Train demo model
-        run: python train.py
+      - name: Train and evaluate real listing models
+        run: |
+          python train.py --data datasets/clean_used_cars.csv
 
-      - name: Verify model prediction
+      - name: Verify trained model and prediction
         run: |
           python - <<'PY'
           from src.valuation import load_model, predict_price, load_sample_data
+          from src.schema import FEATURE_COLUMNS
 
           model = load_model("models/used_car_model.joblib")
-          assert model is not None, "Model was not saved"
+          assert model is not None, "Model artifact was not saved"
 
           data = load_sample_data()
-          record = data.drop(columns=["selling_price"]).iloc[0].to_dict()
+          record = data[FEATURE_COLUMNS].iloc[0].to_dict()
           price = predict_price(model, record)
 
-          assert price > 0, "Invalid prediction"
+          assert price > 0, f"Invalid prediction: {price}"
           print(f"Model prediction successful: INR {price:,.2f}")
           PY
+
+      - name: Upload model evaluation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: autovalue-model-evaluation
+          path: reports/model_metrics.json
+          if-no-files-found: error
